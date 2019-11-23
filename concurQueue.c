@@ -2,16 +2,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// the matching function
-//typedef int (*Queue_matchFn)(void *userArg, void *ptr); // TODO make dummy for testing
-
-// the queue constructor
+// queue constructor
 struct Queue * Queue_new(size_t maxSize) {
 
-    // alloc the queue struct
+    // alloc queue struct
     struct Queue *myQ = calloc(1, sizeof(struct Queue));
 
-    // alloc the queue data
+    // alloc queue's actual queue of void*
     myQ->queue = malloc(sizeof(void*) * maxSize);
 
     // TODO handle this error case better
@@ -20,17 +17,17 @@ struct Queue * Queue_new(size_t maxSize) {
     } 
     
     myQ->queueCount = 0; // zero elements to start
-    myQ->queueCap = maxSize; // queue can hold this much
+    myQ->queueCap = maxSize; // queue's element capacity
 
-    // front and back start out as the same
+    // front and back start out at same index
     myQ->front = 0;
     myQ->back = 0;
 
-    return myQ;
+    return myQ; // return pointer to the queue struct
 
 }
 
-// the queue destructor
+// queue destructor
 void Queue_delete(struct Queue *me) {
 
     // free all alloc'd memory!
@@ -41,8 +38,7 @@ void Queue_delete(struct Queue *me) {
 
 }
 
-// add data to the back of the queue
-/* Returns 0 if queue is full, 1 otherwise */
+/*  add data to BACK of queue, return 0 if queue is full, return 1 otherwise */
 int Queue_add(struct Queue *me, void *data) {
 
     // check if queue is full
@@ -79,13 +75,12 @@ int Queue_add(struct Queue *me, void *data) {
 
 }
 
-// remove data at the front of the queue
-/* Returns NULL if queue is empty */
+// remove front of queue, return void* to new front, or NULL if empty */
 void *Queue_remove(struct Queue *me) {
 
     printf("\tREMOVING front...\n");
     
-    // if queue is empty
+    // if queue is already empty
     if (me->queueCount == 0) {
         printf("\tnothing to remove\n");
         return NULL;
@@ -93,34 +88,61 @@ void *Queue_remove(struct Queue *me) {
 
     printf("\told front = %i\n", *((int*)me->queue[me->front]));
 
-    me->queue[me->front] = NULL; // erase front element    
+    me->queue[me->front] = NULL; // erase front element
     me->queueCount--; // decrement queue count
 
-    // shift up by 1 element if not empty
+    // update front index to the new front element if queue is not empty
     if (me->queueCount != 0) {
+
         printf("not empty yet\n");
         me->front++; // go to next open spot
 
-        // TODO handle wraparound
+        // if front is out of bounds, wrap it around
         if (me->front == me->queueCap) {
             printf("wrapping front!\n");
             me->front = 0; // wrapround!
         }
 
-    } else {
-        printf("queue is empty\n");
     }
-
 
     //printf("\tQUEUE COUNT = %lu\n", me->queueCount);
 
-    return me->queue[me->front]; // NULL if removal emptied queue
+    // return pointer to front of queue - this will be NULL if queue is empty
+    return me->queue[me->front];
 
 }
 
 // returns pointer to element if userArg in queue, or NULL if not found
 void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
 
+    printf("Looking for %i... ", *((int*)userArg));
+
+    size_t current = me->front;
+    size_t count = me->queueCount;
+
+    // front to back, check the queue for the userArg element
+    while (count-- > 0) {
+
+        // check if the current element is a match
+        if (matchFn(userArg, me->queue[current]) == 0) {
+            printf("\tFOUND!\n");
+            return me->queue[current];
+        }
+
+        // update current to next element in queue
+        current++;
+
+        // wraparound current if needed
+        if (current == me->queueCap) {
+            printf("wrapping current!\n");
+            current = 0; // wrapround!
+        }
+
+    }
+    
+
+    printf("\tNOT FOUND :(\n");
+    // element was not found in queue
     return NULL;
 
 }
