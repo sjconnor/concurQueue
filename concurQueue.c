@@ -1,6 +1,8 @@
 #include "concurQueue.h"    // TODO needs to be a library
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>    
+
 
 // queue constructor
 struct Queue * Queue_new(size_t maxSize) {
@@ -15,6 +17,12 @@ struct Queue * Queue_new(size_t maxSize) {
     if (myQ == NULL) {
         printf("Failed to malloc\n");
     } 
+
+    // set thread synchronization 
+    pthread_mutex_init(&myQ->qLock, NULL); // init with defaults
+    pthread_cond_init(&myQ->qCond, NULL); // init with defaults
+    myQ->writers = 0; // condition to wake sleeping read threads
+    myQ->readers = 0; // condition to wake sleeping write (add, remove) threads
     
     myQ->queueCount = 0; // zero elements to start
     myQ->queueCap = maxSize; // queue's element capacity
@@ -23,7 +31,7 @@ struct Queue * Queue_new(size_t maxSize) {
     myQ->front = 0;
     myQ->back = 0;
 
-    return myQ; // return pointer to the queue struct
+    return myQ;
 
 }
 
@@ -32,6 +40,10 @@ void Queue_delete(struct Queue *me) {
 
     // free all alloc'd memory!
     free(me->queue);
+    
+    // TODO handle errors for these destructions
+    pthread_mutex_destroy(&me->qLock);
+    pthread_cond_destroy(&me->qCond);
     free(me);
 
     return;
@@ -41,84 +53,124 @@ void Queue_delete(struct Queue *me) {
 /*  add data to BACK of queue, return 0 if queue is full, return 1 otherwise */
 int Queue_add(struct Queue *me, void *data) {
 
+    int result = 1; 
+
+    pthread_mutex_lock(&me->qLock);
+
+    me->writers++;  // indicate a writing thread is present
+
+    while (me->readers) {    // SLEEP UNTIL NO READERS ACTIVE
+        pthread_cond_wait(&me->qCond, &me->qLock); // unlocks on sleep, re-locks on wake
+    }
+
     // check if queue is full
     if (me->queueCap == me->queueCount) {
+
         // TODO double check this later
-        //printf("Queue is full\n");
-        return 0;
+        result = 0;
+
     } else if (me->queueCap < me->queueCount) {
+
         // TODO handle this error better
         printf("Error in queue add\n");
-        return -1;
-    }
+        result = -1;
 
-    // shift back by 1 element if not the first/only added to queue
-    if (me->queueCount != 0) {
-        //printf("not first\n");
-        me->back++; // go to next open spot
-        
-        // TODO handle wraparound
-        if (me->back == me->queueCap) {
-            me->back = 0; // wrapround!
+    } else {
+
+        // shift back by 1 element if not the first/only added to queue
+        if (me->queueCount != 0) {
+
+            me->back++; // go to next open spot
+            
+            // handle wraparound
+            if (me->back == me->queueCap) {
+                me->back = 0;
+            }
         }
+
+        me->queue[me->back] = data; // add element to the queue
+        me->queueCount++; // update count of elements
+
     }
 
-    me->queue[me->back] = data;
+    me->writers--;  // indicate the writer is complete
 
-    //printf("\tadded %i at idx %lu\n", *((int*)me->queue[me->back]), me->back);
-    
-    // update queue count
-    me->queueCount++; // update count of elements
-    //printf("\tQUEUE COUNT = %lu\n", me->queueCount);
+    if (!me->writers) { // wake sleeping threads when write complete
+        pthread_cond_broadcast(&me->qCond);
+    }
 
-    return 1;
+    pthread_mutex_unlock(&me->qLock);
+
+    return result;
 
 }
 
 // remove front of queue, return void* to new front, or NULL if empty */
 void *Queue_remove(struct Queue *me) {
 
-    //printf("\tREMOVING front...\n");
+    pthread_mutex_lock(&me->qLock);
+
+    me->writers++;  // indicate a writing thread is present
+
+    while (me->readers) {    // SLEEP UNTIL NO READERS ACTIVE
+        pthread_cond_wait(&me->qCond, &me->qLock); // unlocks on sleep, re-locks on wake
+    }
     
-    // if queue is already empty
-    if (me->queueCount == 0) {
-        //printf("nothing to remove\n");
-        return NULL;
-    }
-
-    //printf("\told front = %i\n", *((int*)me->queue[me->front]));
-
-    me->queue[me->front] = NULL; // erase front element
-    me->queueCount--; // decrement queue count
-
-    // update front index to the new front element if queue is not empty
+    // if not empty, remove front element, update count, update front index
     if (me->queueCount != 0) {
+     
+        me->queue[me->front] = NULL; // erase front element
+        me->queueCount--; // decrement queue count
 
-        //printf("not empty yet\n");
-        me->front++; // go to next open spot
+        // update front index to the new front element if queue is not now empty
+        if (me->queueCount != 0) {
 
-        // if front is out of bounds, wrap it around
-        if (me->front == me->queueCap) {
-            printf("wrapping front!\n");
-            me->front = 0; // wrapround!
+            //printf("not empty yet\n");
+            me->front++; // go to next open spot
+
+            // if front is out of bounds, wrap it around
+            if (me->front == me->queueCap) {
+                printf("wrapping front!\n");
+                me->front = 0; // wrapround!
+            }
+
         }
-
+        
     }
 
-    //printf("\tQUEUE COUNT = %lu\n", me->queueCount);
+    void* newFront = me->queue[me->front]; // NULL if queue is empty
+
+    me->writers--;  // indicate the writer is complete
+
+    if (!me->writers) { // wake sleeping threads when write complete
+        pthread_cond_broadcast(&me->qCond);
+    }
+
+    pthread_mutex_unlock(&me->qLock);
 
     // return pointer to front of queue - this will be NULL if queue is empty
-    return me->queue[me->front];
+    return newFront;
 
 }
 
 // returns pointer to element if userArg in queue, or NULL if not found
 void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
 
+    pthread_mutex_lock(&me->qLock); // LOCK
+
+    while (me->writers) {    // SLEEP UNTIL NO WRITERS
+        pthread_cond_wait(&me->qCond, &me->qLock); // unlocks on sleep, re-locks on wake
+    }
+
+    me->readers++;  // INCREMENT READER COND VAR
+
+    pthread_mutex_unlock(&me->qLock);   // UNLOCK
+
     //printf("Looking for %i... ", *((int*)userArg));
 
     size_t current = me->front;
     size_t count = me->queueCount;
+    void* foundElement = NULL; // will overwrite if element found
 
     // front to back, check the queue for the userArg element
     while (count-- > 0) {
@@ -126,7 +178,8 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
         // check if the current element is a match
         if (matchFn(userArg, me->queue[current]) == 0) {
             //printf("\tFOUND!\n");
-            return me->queue[current];
+            foundElement = me->queue[current];
+            break;
         }
 
         // update current to next element in queue
@@ -141,8 +194,17 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
     }
     
 
+    pthread_mutex_lock(&me->qLock); // LOCK
+    me->readers--;  // indicate a reader has finished
+
+    if (!me->readers) { // wake all threads if all reads are done
+        pthread_cond_broadcast(&me->qCond);
+    }
+
+    pthread_mutex_unlock(&me->qLock);// UNLOCK
+
     //printf("\tNOT FOUND :(\n");
     // element was not found in queue
-    return NULL;
+    return foundElement; // NULL or pointer to the found element
 
 }

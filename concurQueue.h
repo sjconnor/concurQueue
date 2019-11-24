@@ -10,6 +10,18 @@ struct Queue {
     void **queue; // pointer to alloc'd queue of void*
     size_t queueCount; // number of elements in the queue, i.e., queue spots filled
     size_t queueCap; // number of elements the queue can accomodate, i.e., queue capacity
+
+    /******************************************************************************
+    PER-QUEUE THREAD SYNCHRONIZATION 
+    ******************************************************************************/
+
+    pthread_mutex_t qLock;
+    pthread_cond_t qCond;
+    int writers; // condition to wake sleeping read threads
+    int readers; // condition to wake sleeping write (add, remove) threads
+
+    /*****************************************************************************/
+
 };
 
 // the queue constructor
