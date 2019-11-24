@@ -240,6 +240,15 @@ void testCirc() {
     return;
 }
 
+void testThreads() {
+
+    printf("TEST 4... multithreading\n");
+
+    
+    return;
+
+}
+
 int main() {
 
     printf("You can do it!\n");
@@ -247,6 +256,8 @@ int main() {
     testManyInts();
     testRemove();
     testCirc();
+
+    testThreads();
 
     return 0;
 }
