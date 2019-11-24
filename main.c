@@ -16,7 +16,9 @@ int matchFn(void *userArg, void *ptr) {
 }
 
 // does basic test of adding a large number of elements
-int testManyInts(void) {
+void testManyInts(void) {
+
+    printf("TEST 1: Adding elements...\n");
 
     int result = 0;
     const int numElements = 1024;
@@ -86,12 +88,20 @@ int testManyInts(void) {
     // free the memory
     Queue_delete(myQ);
 
-    return result;
+    if (result) {
+         printf("TEST 1 RESULT: FAIL\n\n"); 
+    } else {
+        printf("TEST 1 RESULT: PASS\n\n");
+    }
+
+    return;
 
 }
 
 // tests basic add, remove, and find on small number of elements
-int testRemove(void) {
+void testRemove(void) {
+
+    printf("TEST 2: Removing elements...\n");
 
     int result = 0;
     const int numElements = 5;
@@ -153,13 +163,28 @@ int testRemove(void) {
         result = -1;
     }
 
+    // removal on empty queue
+    if (Queue_remove(myQ) != NULL) {
+        printf("\tFAIL: removal on empty queue returned non-NULL\n");
+    } else {
+        printf("\tPASS: removal on empty queue returned NULL\n");
+    }
+
     Queue_delete(myQ);
 
-    return result; // pass if and only if all tests here passed
+    if (result) {
+         printf("TEST 2 RESULT: FAIL\n\n"); 
+    } else {
+        printf("TEST 2 RESULT: PASS\n\n");
+    }
+
+    return;
 
 }
 
-int testCirc() {
+void testCirc() {
+
+    printf("TEST 3: Testing circular-ness and intermingled functionality\n");
 
     int result = 0;
 
@@ -206,37 +231,22 @@ int testCirc() {
 
     Queue_delete(myQ);
 
-    return result;
+    if (result) {
+         printf("TEST 3 RESULT: FAIL\n\n"); 
+    } else {
+        printf("TEST 3 RESULT: PASS\n\n");
+    }
+
+    return;
 }
 
 int main() {
 
     printf("You can do it!\n");
 
-    
-    printf("TEST 1: adding many ints to queue...\n");
-
-    if (testManyInts()) {
-        printf("TEST 1 RESULT: FAIL\n"); 
-    } else {
-        printf("TEST 1 RESULT: PASS\n");
-    }
-
-    printf("TEST 2: removing elements...\n");
-
-    if (testRemove()) {
-        printf("TEST 2 RESULT: FAIL\n"); 
-    } else {
-        printf("TEST 2 RESULT: PASS\n");
-    }
-
-    printf("TEST 3: checking circular-ness\n");
-
-    if (testCirc()) {
-        printf("TEST 3 RESULT: FAIL\n"); 
-    } else {
-        printf("TEST 3 RESULT: PASS\n");
-    }
+    testManyInts();
+    testRemove();
+    testCirc();
 
     return 0;
 }
