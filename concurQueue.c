@@ -44,7 +44,7 @@ int Queue_add(struct Queue *me, void *data) {
     // check if queue is full
     if (me->queueCap == me->queueCount) {
         // TODO double check this later
-        printf("Queue is full\n");
+        //printf("Queue is full\n");
         return 0;
     } else if (me->queueCap < me->queueCount) {
         // TODO handle this error better
@@ -65,7 +65,7 @@ int Queue_add(struct Queue *me, void *data) {
 
     me->queue[me->back] = data;
 
-    printf("\tadded %i at idx %lu\n", *((int*)me->queue[me->back]), me->back);
+    //printf("\tadded %i at idx %lu\n", *((int*)me->queue[me->back]), me->back);
     
     // update queue count
     me->queueCount++; // update count of elements
@@ -78,15 +78,15 @@ int Queue_add(struct Queue *me, void *data) {
 // remove front of queue, return void* to new front, or NULL if empty */
 void *Queue_remove(struct Queue *me) {
 
-    printf("\tREMOVING front...\n");
+    //printf("\tREMOVING front...\n");
     
     // if queue is already empty
     if (me->queueCount == 0) {
-        printf("\tnothing to remove\n");
+        //printf("nothing to remove\n");
         return NULL;
     }
 
-    printf("\told front = %i\n", *((int*)me->queue[me->front]));
+    //printf("\told front = %i\n", *((int*)me->queue[me->front]));
 
     me->queue[me->front] = NULL; // erase front element
     me->queueCount--; // decrement queue count
@@ -94,7 +94,7 @@ void *Queue_remove(struct Queue *me) {
     // update front index to the new front element if queue is not empty
     if (me->queueCount != 0) {
 
-        printf("not empty yet\n");
+        //printf("not empty yet\n");
         me->front++; // go to next open spot
 
         // if front is out of bounds, wrap it around
@@ -115,7 +115,7 @@ void *Queue_remove(struct Queue *me) {
 // returns pointer to element if userArg in queue, or NULL if not found
 void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
 
-    printf("Looking for %i... ", *((int*)userArg));
+    //printf("Looking for %i... ", *((int*)userArg));
 
     size_t current = me->front;
     size_t count = me->queueCount;
@@ -125,7 +125,7 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
 
         // check if the current element is a match
         if (matchFn(userArg, me->queue[current]) == 0) {
-            printf("\tFOUND!\n");
+            //printf("\tFOUND!\n");
             return me->queue[current];
         }
 
@@ -134,14 +134,14 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
 
         // wraparound current if needed
         if (current == me->queueCap) {
-            printf("wrapping current!\n");
+            //printf("wrapping current!\n");
             current = 0; // wrapround!
         }
 
     }
     
 
-    printf("\tNOT FOUND :(\n");
+    //printf("\tNOT FOUND :(\n");
     // element was not found in queue
     return NULL;
 
