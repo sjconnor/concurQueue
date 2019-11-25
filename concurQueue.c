@@ -3,15 +3,17 @@
 #include <stdlib.h>
 #include <pthread.h>    
 #include <unistd.h>
-
+#include <errno.h>
 
 /* 
     Queue constructor 
     returns pointer to alloc'd queue struct or NULL on error
+    errno contains POSIX error if one occured
 */
 struct Queue * Queue_new(size_t maxSize) {
 
     int rc = 0; // for error checking
+    errno = 0;
 
     // alloc queue struct
     struct Queue *myQ = calloc(1, sizeof(struct Queue));
@@ -25,6 +27,7 @@ struct Queue * Queue_new(size_t maxSize) {
     if (!myQ->queue) {
         fprintf(stderr, "error: malloc queue, rc: %d\n", rc);
         Queue_delete(myQ);
+        errno = rc;
         return NULL;
     }
 
@@ -32,11 +35,13 @@ struct Queue * Queue_new(size_t maxSize) {
     if((rc = pthread_mutex_init(&myQ->qLock, NULL))) { // returns 0 on success
         fprintf(stderr, "error: pthread_mutex_init, rc: %d\n", rc);
         Queue_delete(myQ); 
+        errno = rc;
         return NULL;
     }
     if((rc = pthread_cond_init(&myQ->qCond, NULL))) { // returns 0 on success
         fprintf(stderr, "error: pthread_cond_init, rc: %d\n", rc);
         Queue_delete(myQ);
+        errno = rc;
         return NULL;
     }
 
@@ -74,17 +79,20 @@ void Queue_delete(struct Queue *me) {
 /*  
     Queue_add places data at BACK of queue
     returns 0 if queue is full, 1 if queue is not full, 
-    returns -1 if general error, or error code from mutex/cond var failure
+    returns -1 if error due to queue count somehow exceeding capacity,
+    or returns -1 and errno set to POSIX failure
     Uses 1 lock to protect shared resource (the queue) during add
 */
 int Queue_add(struct Queue *me, void *data) {
 
     int result = 1; // assume queue is not full to start
     int rc = 0; // for errors
+    errno = 0;
 
     if ((rc = pthread_mutex_lock(&me->qLock))) { // 0 on success
         fprintf(stderr, "error: pthread_mutex_lock, rc: %d\n", rc);
-        return rc;
+        errno = rc;
+        return -1;
     }
 
     //printf("Add thread starting, ID: %lu\n", pthread_self());
@@ -98,7 +106,8 @@ int Queue_add(struct Queue *me, void *data) {
 
         if ((rc = pthread_cond_wait(&me->qCond, &me->qLock))) { // 0 on success
             fprintf(stderr, "error: pthread_cond_wait, rc: %d\n", rc);
-            return rc;
+            errno = rc;
+            return -1;
         }   
 
         /* 
@@ -145,7 +154,8 @@ int Queue_add(struct Queue *me, void *data) {
 
         if ((rc = pthread_cond_broadcast(&me->qCond))) { // 0 on success
             fprintf(stderr, "error: pthread_cond_broadcast, rc: %d\n", rc);
-            return rc;
+            errno = rc;
+            return -1;
         }   
 
     }
@@ -154,7 +164,8 @@ int Queue_add(struct Queue *me, void *data) {
 
     if ((rc = pthread_mutex_unlock(&me->qLock))) { // 0 on success
         fprintf(stderr, "error: pthread_mutex_unlock, rc: %d\n", rc);
-        return rc;
+        errno = rc;
+        return -1;
     }  
 
     return result;
@@ -174,6 +185,7 @@ void *Queue_remove(struct Queue *me) {
 
     if ((rc = pthread_mutex_lock(&me->qLock))) { // 0 on success
         fprintf(stderr, "error: pthread_mutex_lock, rc: %d\n", rc);
+        errno = rc;
         return NULL; // TODO better error
     }
 
@@ -183,6 +195,7 @@ void *Queue_remove(struct Queue *me) {
 
         if ((rc = pthread_cond_wait(&me->qCond, &me->qLock))) { // 0 on success
             fprintf(stderr, "error: pthread_cond_wait, rc: %d\n", rc);
+            errno = rc;
             return NULL; // TODO better error
         }   
 
@@ -223,12 +236,14 @@ void *Queue_remove(struct Queue *me) {
 
         if ((rc = pthread_cond_broadcast(&me->qCond))) { // 0 on success
             fprintf(stderr, "error: pthread_cond_broadcast, rc: %d\n", rc);
+            errno = rc;
             return NULL; // TODO better error 
         }  
     }
 
     if ((rc = pthread_mutex_unlock(&me->qLock))) { // 0 on success
         fprintf(stderr, "error: pthread_mutex_unlock, rc: %d\n", rc);
+        errno = rc;
         return NULL; // TODO better error
     }
 
@@ -239,14 +254,22 @@ void *Queue_remove(struct Queue *me) {
 
 /*
     Queue_find searches queue for element matching userArg
-    returns pointer to element if userArg in queue, or NULL if not found
+    returns pointer to element if userArg in queue
+    returns NULL and errno = 0 if not found
+    returns NULL and errno to POSIX error if mutex/condvar failure
     Uses 2 locks to allow reading thread to be blocked by add/remove
     but still allow concurrency of reading threads
 */
 void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
 
+    int rc = 0;
+    errno = 0;
 
-    pthread_mutex_lock(&me->qLock); // LOCK
+    if ((rc = pthread_mutex_lock(&me->qLock))) { // 0 on success
+        fprintf(stderr, "error: pthread_mutex_lock, rc: %d\n", rc);
+        errno = rc;
+        return NULL; // TODO better error
+    }
     
     //printf("Read thread starting, ID: %lu\n", pthread_self());
 
@@ -258,7 +281,13 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
     while (me->writers) {    // sleep until no writers
         //printf("\tthere are %d writers in line...\n", me->writers);
         //printf("Read thread waiting, ID: %lu\n", pthread_self());
-        pthread_cond_wait(&me->qCond, &me->qLock); // unlocks on sleep, re-locks on wake
+
+        if ((rc = pthread_cond_wait(&me->qCond, &me->qLock))) { // 0 on success
+            fprintf(stderr, "error: pthread_cond_wait, rc: %d\n", rc);
+            errno = rc;
+            return NULL; // TODO better error
+        }   
+
     }
 
     //printf("Read thread continuing, ID: %lu\n", pthread_self());
@@ -294,17 +323,31 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
 
     }
     
-    pthread_mutex_lock(&me->qLock);
+    if ((rc = pthread_mutex_lock(&me->qLock))) { // 0 on success
+        fprintf(stderr, "error: pthread_mutex_lock, rc: %d\n", rc);
+        errno = rc;
+        return NULL; // TODO better error
+    }
 
     me->readers--;  // indicate a reader has finished
 
     if (!me->readers) { // wake all threads IFF all read threads done
-        pthread_cond_broadcast(&me->qCond);
+
+        if ((rc = pthread_cond_broadcast(&me->qCond))) { // 0 on success
+            fprintf(stderr, "error: pthread_cond_broadcast, rc: %d\n", rc);
+            errno = rc;
+            return NULL;
+        }  
+
     }
 
     //printf("Read thread finishing, ID: %lu\n", pthread_self());
 
-    pthread_mutex_unlock(&me->qLock);
+    if ((rc = pthread_mutex_unlock(&me->qLock))) { // 0 on success
+        fprintf(stderr, "error: pthread_mutex_unlock, rc: %d\n", rc);
+        errno = rc;
+        return NULL; // TODO better error
+    }
 
 
     return foundElement; // NULL or pointer to the found element
