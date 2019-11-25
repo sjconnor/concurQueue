@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>    
+#include <unistd.h>
 
 
 /* Queue constructor */
@@ -24,6 +25,8 @@ struct Queue * Queue_new(size_t maxSize) {
     myQ->writers = 0; // condition to wake sleeping read threads
     myQ->readers = 0; // condition to wake sleeping write (add, remove) threads
     
+    printf("\n\ninit queue with %i writers and %i readers\n\n", myQ->writers, myQ->readers);
+
     myQ->queueCount = 0; // zero elements to start
     myQ->queueCap = maxSize; // queue's element capacity
 
@@ -57,6 +60,7 @@ void Queue_delete(struct Queue *me) {
     Uses 1 lock to protect shared resource (the queue) during add
 */
 int Queue_add(struct Queue *me, void *data) {
+
 
     int result = 1; // assume queue is not full to start
 
@@ -185,7 +189,11 @@ void *Queue_remove(struct Queue *me) {
 */
 void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
 
+
     pthread_mutex_lock(&me->qLock); // LOCK
+    
+    printf("Read thread starting, ID: %lu\n", pthread_self());
+
 
     /* 
             reader threads are blocked here if there are writers waiting
@@ -193,8 +201,12 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
             and guarantees no deadlock for waiting threads
     */ 
     while (me->writers) {    // sleep until no writers
+        printf("\tthere are %d writers in line...\n", me->writers);
+        printf("Read thread waiting, ID: %lu\n", pthread_self());
         pthread_cond_wait(&me->qCond, &me->qLock); // unlocks on sleep, re-locks on wake
     }
+
+    printf("Read thread continuing, ID: %lu\n", pthread_self());
 
     me->readers++;  // indicate a reader thread present
 
@@ -228,14 +240,17 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
     }
     
     pthread_mutex_lock(&me->qLock);
-    
+
     me->readers--;  // indicate a reader has finished
 
     if (!me->readers) { // wake all threads IFF all read threads done
         pthread_cond_broadcast(&me->qCond);
     }
 
+    printf("Read thread finishing, ID: %lu\n", pthread_self());
+
     pthread_mutex_unlock(&me->qLock);
+
 
     return foundElement; // NULL or pointer to the found element
 

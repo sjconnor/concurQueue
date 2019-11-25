@@ -1,12 +1,14 @@
 #include "concurQueue.h"    // TODO needs to be a library
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
 
-// Returns an integer greater than, equal to, or less than 0, according as 
-    //     the data identified by userArg is greater than, equal to, or less than 
-    //     the data identified by ptr.
-    //     ptr is a pointer to an element in the list. userArg is a ptr to any
-    //     user-managed data (that may even be of different type)
+
+struct findArgs {
+   struct Queue *q;
+   Queue_matchFn fn;
+   void *arg;
+};
 
 // Just a dummy comparator for testing - WORKS ON INT ONLY!
 int matchFn(void *userArg, void *ptr) {
@@ -240,11 +242,89 @@ void testCirc() {
     return;
 }
 
+// because pthread_create doesn't work for functions with > 1 param
+void* findThreadPayload(void *args) {
+
+    struct findArgs *a = args;
+    return Queue_find(a->q, a->fn, a->arg);
+
+}
+
 void testThreads() {
 
     printf("TEST 4... multithreading\n");
 
+    int result = 0;
+
+    const int numElements = 5;
+
+    // build a queue
+    struct Queue *myQ = Queue_new(numElements); 
+
+    printf("\n\t THERE ARE %d writers in the queue\n\n", myQ->writers);
+
+    // some test elements
+    int intArray[numElements];
     
+    // add numElements to the queue
+    for (int i = 0; i < numElements; i++) {
+        intArray[i] = i;
+        Queue_add(myQ, (void*)&intArray[i]);
+    }
+
+    /**********************************
+    Test for concurrent reads
+    ***********************************/
+
+    
+    printf("\n\nmy ID is %lu\n\n", pthread_self());
+
+
+    struct findArgs args;
+    args.q = myQ;
+    args.fn = &matchFn;
+    args.arg = (void*)&intArray[1];
+
+    // create 3 threads to execute find
+    for (int i = 0; i < 3; i++) {
+
+        pthread_create(&(myQ->tID[i]), NULL, findThreadPayload, &args);
+         
+    }
+    
+    pthread_join(myQ->tID[0], NULL);
+    pthread_join(myQ->tID[1], NULL);
+    pthread_join(myQ->tID[2], NULL);
+
+
+    /***********************************
+    Test for !(find && add)
+    ***********************************/
+
+    /***********************************
+    Test for !(find && remove)
+    ***********************************/
+
+    /***********************************
+    Test for !(add && remove)
+    ***********************************/
+
+    /***********************************
+    Test for !(add && add)
+    ***********************************/
+
+    /***********************************
+    Test for !(remove && remove)
+    ***********************************/
+
+    if (result) {
+         printf("TEST 4 RESULT: FAIL\n\n"); 
+    } else {
+        printf("TEST 4 RESULT: PASS\n\n");
+    }
+
+    Queue_delete(myQ);
+
     return;
 
 }
@@ -253,9 +333,9 @@ int main() {
 
     printf("You can do it!\n");
 
-    testManyInts();
-    testRemove();
-    testCirc();
+    //testManyInts();
+    //testRemove();
+    //testCirc();
 
     testThreads();
 
