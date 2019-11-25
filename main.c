@@ -2,11 +2,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <unistd.h>
 
 
+// for multithread testing of find 
 struct findArgs {
    struct Queue *q;
    Queue_matchFn fn;
+   void *arg;
+};
+
+// for multithread testing of add
+struct addArgs {
+   struct Queue *q;
    void *arg;
 };
 
@@ -118,64 +126,64 @@ void testRemove(void) {
         Queue_add(myQ, (void*)&intArray[i]);
     }
 
-    void* newFront; // remove should return pointer to new front of queue
+    void* removed; // remove should return pointer to new front of queue
 
-    // remove all but one element
-    for (int i = 0; i < numElements - 1; i++) {
+    // remove all elements and check 
+    for (int i = 0; i < numElements; i++) {
 
-        newFront = Queue_remove(myQ);
+        //currentFront 
+        removed = Queue_remove(myQ);
 
-        // check for NULL on nonempty queue
-        if (newFront == NULL) { 
-            //printf("\tFAIL: returned NULL on nonempty queue\n");
+        //printf("\tremoved %d\n", *(int*)removed);
+
+        // check for NULL on nonempty queue and correct value if not NULL
+        if (removed == NULL) { 
+            printf("\tFAIL: returned NULL on nonempty queue\n");
+            result = -1;
+        } else if (*(int*)removed != i) {
+            printf("\tFAIL: removed = %d, expected = %d\n", *(int*)removed, i);
             result = -1;
         }
         
         // check that queueCount updated
         if (myQ->queueCount != numElements - i - 1) { 
-            //printf("\tFAIL: queueCount = %lu, expected %i\n", myQ->queueCount, numElements-i-1);
+            printf("\tFAIL: queueCount = %lu, expected %i\n", myQ->queueCount, numElements-i-1);
             result = -1;
-        } //else {
-            //printf("\tPASS: queueCount = %lu, expected %i\n", myQ->queueCount, numElements-i-1);
-        //}
+        }
         
-        // check that front updated
-        if (*((int*)myQ->queue[myQ->front]) != i + 1 || myQ->front != i + 1) {
-            //printf("\tFAIL: front of queue not updated correctly\n");
+        // check that front updated to next in line, or NULL if last element was removed
+        if (myQ->queueCount > 0 && (*((int*)myQ->queue[myQ->front]) != i + 1 || myQ->front != i + 1)) {
+            printf("\tFAIL: front of queue not updated correctly\n");
             result = -1;
-        } //else {
-            //printf("front = %i, front idx = %lu\n", *((int*)myQ->queue[myQ->front]), myQ->front);
-            //printf("\tPASS: front idx and front element updated correctly\n");
-        //}
+        } else if (myQ->queueCount == 0 && (myQ->queue[myQ->front] != NULL)) { 
+            printf("\tFAIL: empty queue front is not NULL\n");
+            result = -1;
+        }
+        
 
+    }
+
+    // test removal on empty queue
+    removed = Queue_remove(myQ);
+
+    if (removed == NULL) {
+        printf("\tPASS: removal on empty queue returned NULL\n");
+    } else {
+        printf("\tFAIL: removal on empty queue returned non-NULL\n");
+        result = -1;
     }
 
     // single pass/fail for removals up to last element
     if (!result) {
-        printf("\tPASS: removal of 0...n-1 elements done correctly\n");
+        printf("\tPASS: removal of 0...n-1 elements all correct\n");
     } else {
-        printf("\tFAIL: removal of 0...n-1 elements incorrectly done\n");
-    }
-
-    // removal of last element
-    if (Queue_remove(myQ) == NULL && myQ->queueCount == 0 && myQ->front == myQ->back) {
-        printf("\tPASS: removal of last element done correctly\n");
-    } else {
-        printf("\tFAIL: removal of last element incorrectly done\n");
-        result = -1;
-    }
-
-    // removal on empty queue
-    if (Queue_remove(myQ) != NULL) {
-        printf("\tFAIL: removal on empty queue returned non-NULL\n");
-    } else {
-        printf("\tPASS: removal on empty queue returned NULL\n");
+        printf("\tFAIL: one or more errors in removing elements\n");
     }
 
     Queue_delete(myQ);
 
     if (result) {
-         printf("TEST 2 RESULT: FAIL\n\n"); 
+        printf("TEST 2 RESULT: FAIL\n\n"); 
     } else {
         printf("TEST 2 RESULT: PASS\n\n");
     }
@@ -242,17 +250,29 @@ void testCirc() {
     return;
 }
 
-// because pthread_create doesn't work for functions with > 1 param
+// called by pthread_create for testing because find needs > 1 param
 void* findThreadPayload(void *args) {
 
     struct findArgs *a = args;
+
     return Queue_find(a->q, a->fn, a->arg);
 
 }
 
-void testThreads() {
+// called by pthread_create for testing because add needs > 1 param
+int addThreadPayload(void *args) {
+    
+    struct addArgs *a = args;
 
-    printf("TEST 4... multithreading\n");
+    return Queue_add(a->q, a->arg);
+
+}
+
+void comeBack(void *args) {
+    return;
+}
+
+void testThreads() {
 
     int result = 0;
 
@@ -260,8 +280,6 @@ void testThreads() {
 
     // build a queue
     struct Queue *myQ = Queue_new(numElements); 
-
-    printf("\n\t THERE ARE %d writers in the queue\n\n", myQ->writers);
 
     // some test elements
     int intArray[numElements];
@@ -276,9 +294,7 @@ void testThreads() {
     Test for concurrent reads
     ***********************************/
 
-    
-    printf("\n\nmy ID is %lu\n\n", pthread_self());
-
+    printf("\n\nTEST 4... multithreading\n");
 
     struct findArgs args;
     args.q = myQ;
@@ -288,14 +304,16 @@ void testThreads() {
     // create 3 threads to execute find
     for (int i = 0; i < 3; i++) {
 
-        pthread_create(&(myQ->tID[i]), NULL, findThreadPayload, &args);
+        if(pthread_create(&(myQ->tID[i]), NULL, findThreadPayload, &args)) {
+            printf("something went wrong\n"); // TODO handle error better
+        } 
          
     }
-    
+
+    // join threads before continuing to avoid early deletion
     pthread_join(myQ->tID[0], NULL);
     pthread_join(myQ->tID[1], NULL);
     pthread_join(myQ->tID[2], NULL);
-
 
     /***********************************
     Test for !(find && add)
@@ -317,6 +335,10 @@ void testThreads() {
     Test for !(remove && remove)
     ***********************************/
 
+
+
+
+
     if (result) {
          printf("TEST 4 RESULT: FAIL\n\n"); 
     } else {
@@ -333,11 +355,11 @@ int main() {
 
     printf("You can do it!\n");
 
-    //testManyInts();
-    //testRemove();
-    //testCirc();
+    testManyInts();
+    testRemove();
+    testCirc();
 
-    testThreads();
+    //testThreads();
 
     return 0;
 }

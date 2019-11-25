@@ -25,8 +25,6 @@ struct Queue * Queue_new(size_t maxSize) {
     myQ->writers = 0; // condition to wake sleeping read threads
     myQ->readers = 0; // condition to wake sleeping write (add, remove) threads
     
-    printf("\n\ninit queue with %i writers and %i readers\n\n", myQ->writers, myQ->readers);
-
     myQ->queueCount = 0; // zero elements to start
     myQ->queueCap = maxSize; // queue's element capacity
 
@@ -66,11 +64,15 @@ int Queue_add(struct Queue *me, void *data) {
 
     pthread_mutex_lock(&me->qLock);
 
+    //printf("Add thread starting, ID: %lu\n", pthread_self());
+
+
     me->writers++;  // indicate a writing thread is present
 
     // if any threads are reading, sleep this thread
     while (me->readers) { 
         // wait unlocks mutex on sleep, re-locks on wake from broadcast
+        //printf("Add thread waiting, ID: %lu\n", pthread_self());
         pthread_cond_wait(&me->qCond, &me->qLock); 
 
         /* 
@@ -115,8 +117,12 @@ int Queue_add(struct Queue *me, void *data) {
     me->writers--;  // indicate a writer thread is done writing
 
     if (!me->writers) { // wake sleeping threads
+        //printf("Add thread broadcasting, ID: %lu\n", pthread_self());
         pthread_cond_broadcast(&me->qCond);
     }
+
+    //printf("Add thread finishing, ID: %lu\n", pthread_self());
+
 
     pthread_mutex_unlock(&me->qLock);
 
@@ -126,7 +132,7 @@ int Queue_add(struct Queue *me, void *data) {
 
 /* 
     Queue_remove sets void* at front of queue to NULL
-    returns void* to new front, which is NULL if queue is empty
+    returns void* to removed element, or NULL if queue was already empty
     Uses 1 lock to protect share resource (the queue) during remove
 */
 void *Queue_remove(struct Queue *me) {
@@ -146,6 +152,9 @@ void *Queue_remove(struct Queue *me) {
         */ 
     }
     
+    // store the element before removing for return - is NULL if empty queue
+    void* oldFront = me->queue[me->front];
+
     // if not empty, remove front element, update count, update front index
     if (me->queueCount != 0) {
      
@@ -166,8 +175,6 @@ void *Queue_remove(struct Queue *me) {
         
     }
 
-    void* newFront = me->queue[me->front]; // is NULL if queue is empty
-
     me->writers--;  // indicate writer is complete
 
     if (!me->writers) { // wake all sleeping threads IFF no writers waiting
@@ -176,8 +183,8 @@ void *Queue_remove(struct Queue *me) {
 
     pthread_mutex_unlock(&me->qLock);
 
-    // return pointer to front of queue - this will be NULL if queue is empty
-    return newFront;
+    // return pointer to removed element (NULL if queue was already empty)
+    return oldFront;
 
 }
 
@@ -192,7 +199,7 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
 
     pthread_mutex_lock(&me->qLock); // LOCK
     
-    printf("Read thread starting, ID: %lu\n", pthread_self());
+    //printf("Read thread starting, ID: %lu\n", pthread_self());
 
 
     /* 
@@ -201,12 +208,12 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
             and guarantees no deadlock for waiting threads
     */ 
     while (me->writers) {    // sleep until no writers
-        printf("\tthere are %d writers in line...\n", me->writers);
-        printf("Read thread waiting, ID: %lu\n", pthread_self());
+        //printf("\tthere are %d writers in line...\n", me->writers);
+        //printf("Read thread waiting, ID: %lu\n", pthread_self());
         pthread_cond_wait(&me->qCond, &me->qLock); // unlocks on sleep, re-locks on wake
     }
 
-    printf("Read thread continuing, ID: %lu\n", pthread_self());
+    //printf("Read thread continuing, ID: %lu\n", pthread_self());
 
     me->readers++;  // indicate a reader thread present
 
@@ -247,7 +254,7 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
         pthread_cond_broadcast(&me->qCond);
     }
 
-    printf("Read thread finishing, ID: %lu\n", pthread_self());
+    //printf("Read thread finishing, ID: %lu\n", pthread_self());
 
     pthread_mutex_unlock(&me->qLock);
 
