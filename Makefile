@@ -6,5 +6,8 @@ all: main.c concurQueue.c
 test: all
 	valgrind ./cq
 
+run: all
+	./cq
+
 clean: 
 	$(RM) cq

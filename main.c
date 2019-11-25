@@ -192,6 +192,7 @@ void testRemove(void) {
 
 }
 
+// tests basic operations to show queue circularity
 void testCirc() {
 
     printf("TEST 3: Testing circular-ness and intermingled functionality\n");
@@ -275,6 +276,7 @@ void comeBack(void *args) {
 void testThreads() {
 
     int result = 0;
+    int rc; // for error checks
 
     const int numElements = 5;
 
@@ -304,9 +306,10 @@ void testThreads() {
     // create 3 threads to execute find
     for (int i = 0; i < 3; i++) {
 
-        if(pthread_create(&(myQ->tID[i]), NULL, findThreadPayload, &args)) {
-            printf("something went wrong\n"); // TODO handle error better
-        } 
+        if ((rc = pthread_create(&(myQ->tID[i]), NULL, findThreadPayload, &args))) {
+            fprintf(stderr, "error: pthread_create, rc: %d\n", rc);
+            return;
+        }
          
     }
 

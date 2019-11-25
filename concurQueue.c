@@ -14,11 +14,6 @@ struct Queue * Queue_new(size_t maxSize) {
     // alloc queue's actual queue of void*
     myQ->queue = malloc(sizeof(void*) * maxSize);
 
-    // TODO handle this error case better
-    if (myQ == NULL) {
-        printf("Failed to malloc\n");
-    } 
-
     // set thread synchronization members
     pthread_mutex_init(&myQ->qLock, NULL); // init with defaults
     pthread_cond_init(&myQ->qCond, NULL); // init with defaults
