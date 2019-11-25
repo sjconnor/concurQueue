@@ -5,21 +5,43 @@
 #include <unistd.h>
 
 
-/* Queue constructor */
+/* 
+    Queue constructor 
+    returns pointer to alloc'd queue struct or NULL on error
+*/
 struct Queue * Queue_new(size_t maxSize) {
+
+    int rc = 0; // for error checking
 
     // alloc queue struct
     struct Queue *myQ = calloc(1, sizeof(struct Queue));
 
+    if (!myQ) {
+        return NULL;
+    }
+
     // alloc queue's actual queue of void*
     myQ->queue = malloc(sizeof(void*) * maxSize);
+    if (!myQ->queue) {
+        fprintf(stderr, "error: malloc queue, rc: %d\n", rc);
+        Queue_delete(myQ);
+        return NULL;
+    }
 
-    // set thread synchronization members
-    pthread_mutex_init(&myQ->qLock, NULL); // init with defaults
-    pthread_cond_init(&myQ->qCond, NULL); // init with defaults
+    // init thread synchronization members with defaults
+    if((rc = pthread_mutex_init(&myQ->qLock, NULL))) { // returns 0 on success
+        fprintf(stderr, "error: pthread_mutex_init, rc: %d\n", rc);
+        Queue_delete(myQ); 
+        return NULL;
+    }
+    if((rc = pthread_cond_init(&myQ->qCond, NULL))) { // returns 0 on success
+        fprintf(stderr, "error: pthread_cond_init, rc: %d\n", rc);
+        Queue_delete(myQ);
+        return NULL;
+    }
+
     myQ->writers = 0; // condition to wake sleeping read threads
     myQ->readers = 0; // condition to wake sleeping write (add, remove) threads
-    
     myQ->queueCount = 0; // zero elements to start
     myQ->queueCap = maxSize; // queue's element capacity
 
@@ -31,16 +53,18 @@ struct Queue * Queue_new(size_t maxSize) {
 
 }
 
-/* Queue destructor */
+/* 
+    Queue destructor 
+    constraints: mutex must be unlocked and cond var not in use
+*/
 void Queue_delete(struct Queue *me) {
 
-    // free all alloc'd memory!
     free(me->queue);
     
-    // TODO handle errors for these destructions
     // must explicitly destroy dynamic mutex, cond var
     pthread_mutex_destroy(&me->qLock);
     pthread_cond_destroy(&me->qCond);
+
     free(me);
 
     return;
@@ -49,26 +73,33 @@ void Queue_delete(struct Queue *me) {
 
 /*  
     Queue_add places data at BACK of queue
-    returns 0 if queue is full, returns 1 if queue is not full 
+    returns 0 if queue is full, 1 if queue is not full, 
+    returns -1 if general error, or error code from mutex/cond var failure
     Uses 1 lock to protect shared resource (the queue) during add
 */
 int Queue_add(struct Queue *me, void *data) {
 
-
     int result = 1; // assume queue is not full to start
+    int rc = 0; // for errors
 
-    pthread_mutex_lock(&me->qLock);
+    if ((rc = pthread_mutex_lock(&me->qLock))) { // 0 on success
+        fprintf(stderr, "error: pthread_mutex_lock, rc: %d\n", rc);
+        return rc;
+    }
 
     //printf("Add thread starting, ID: %lu\n", pthread_self());
-
 
     me->writers++;  // indicate a writing thread is present
 
     // if any threads are reading, sleep this thread
     while (me->readers) { 
+
         // wait unlocks mutex on sleep, re-locks on wake from broadcast
-        //printf("Add thread waiting, ID: %lu\n", pthread_self());
-        pthread_cond_wait(&me->qCond, &me->qLock); 
+
+        if ((rc = pthread_cond_wait(&me->qCond, &me->qLock))) { // 0 on success
+            fprintf(stderr, "error: pthread_cond_wait, rc: %d\n", rc);
+            return rc;
+        }   
 
         /* 
             on broadcast, all threads will wake and stay awake because readers
@@ -78,17 +109,15 @@ int Queue_add(struct Queue *me, void *data) {
         */ 
     }
 
-    // check if queue is full
+    // check if queue is full, else if error, else proceed
     if (me->queueCap == me->queueCount) {
 
-        // TODO double check this later
         result = 0;
 
     } else if (me->queueCap < me->queueCount) {
 
-        // TODO handle this error better
-        printf("Error in queue add\n");
-        result = -1;
+        fprintf(stderr, "queue count exceeds capacity\n");
+        return -1;
 
     } else {
 
@@ -113,13 +142,20 @@ int Queue_add(struct Queue *me, void *data) {
 
     if (!me->writers) { // wake sleeping threads
         //printf("Add thread broadcasting, ID: %lu\n", pthread_self());
-        pthread_cond_broadcast(&me->qCond);
+
+        if ((rc = pthread_cond_broadcast(&me->qCond))) { // 0 on success
+            fprintf(stderr, "error: pthread_cond_broadcast, rc: %d\n", rc);
+            return rc;
+        }   
+
     }
 
     //printf("Add thread finishing, ID: %lu\n", pthread_self());
 
-
-    pthread_mutex_unlock(&me->qLock);
+    if ((rc = pthread_mutex_unlock(&me->qLock))) { // 0 on success
+        fprintf(stderr, "error: pthread_mutex_unlock, rc: %d\n", rc);
+        return rc;
+    }  
 
     return result;
 
@@ -127,17 +163,28 @@ int Queue_add(struct Queue *me, void *data) {
 
 /* 
     Queue_remove sets void* at front of queue to NULL
-    returns void* to removed element, or NULL if queue was already empty
+    returns void* to removed element, or NULL if queue empty or error
     Uses 1 lock to protect share resource (the queue) during remove
 */
 void *Queue_remove(struct Queue *me) {
 
-    pthread_mutex_lock(&me->qLock);
+    int rc = 0; // for error codes
+
+    // TODO - need to handle errors some other way!
+
+    if ((rc = pthread_mutex_lock(&me->qLock))) { // 0 on success
+        fprintf(stderr, "error: pthread_mutex_lock, rc: %d\n", rc);
+        return NULL; // TODO better error
+    }
 
     me->writers++;  // indicate a writing thread is present
 
     while (me->readers) {    // sleep if there are active reading threads
-        pthread_cond_wait(&me->qCond, &me->qLock); // unlocks mutex on sleep, re-locks on wake
+
+        if ((rc = pthread_cond_wait(&me->qCond, &me->qLock))) { // 0 on success
+            fprintf(stderr, "error: pthread_cond_wait, rc: %d\n", rc);
+            return NULL; // TODO better error
+        }   
 
         /* 
             on broadcast, all threads will wake and stay awake because readers
@@ -173,10 +220,17 @@ void *Queue_remove(struct Queue *me) {
     me->writers--;  // indicate writer is complete
 
     if (!me->writers) { // wake all sleeping threads IFF no writers waiting
-        pthread_cond_broadcast(&me->qCond); 
+
+        if ((rc = pthread_cond_broadcast(&me->qCond))) { // 0 on success
+            fprintf(stderr, "error: pthread_cond_broadcast, rc: %d\n", rc);
+            return NULL; // TODO better error 
+        }  
     }
 
-    pthread_mutex_unlock(&me->qLock);
+    if ((rc = pthread_mutex_unlock(&me->qLock))) { // 0 on success
+        fprintf(stderr, "error: pthread_mutex_unlock, rc: %d\n", rc);
+        return NULL; // TODO better error
+    }
 
     // return pointer to removed element (NULL if queue was already empty)
     return oldFront;
@@ -195,7 +249,6 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
     pthread_mutex_lock(&me->qLock); // LOCK
     
     //printf("Read thread starting, ID: %lu\n", pthread_self());
-
 
     /* 
             reader threads are blocked here if there are writers waiting

@@ -296,7 +296,7 @@ void testThreads() {
     Test for concurrent reads
     ***********************************/
 
-    printf("\n\nTEST 4... multithreading\n");
+    printf("TEST 4... multithreading\n");
 
     struct findArgs args;
     args.q = myQ;
@@ -309,6 +309,8 @@ void testThreads() {
         if ((rc = pthread_create(&(myQ->tID[i]), NULL, findThreadPayload, &args))) {
             fprintf(stderr, "error: pthread_create, rc: %d\n", rc);
             return;
+        } else {
+            printf("\tspawned %lu\n", myQ->tID[i]);
         }
          
     }
@@ -362,7 +364,7 @@ int main() {
     testRemove();
     testCirc();
 
-    //testThreads();
+    testThreads();
 
     return 0;
 }
