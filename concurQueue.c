@@ -95,7 +95,7 @@ int Queue_add(struct Queue *me, void *data) {
         return -1;
     }
 
-    //printf("Add thread starting, ID: %lu\n", pthread_self());
+    printf("Add thread starting, ID: %lu\n", pthread_self());
     sleep(1); // SLEEP FOR TESTING
 
     me->writers++;  // indicate a writing thread is present
@@ -104,7 +104,8 @@ int Queue_add(struct Queue *me, void *data) {
     while (me->readers) { 
 
         // wait unlocks mutex on sleep, re-locks on wake from broadcast
-        //printf("Add thread waiting, ID: %lu\n", pthread_self());
+        printf("\tthere are %d readers in line...\n", me->readers);
+        printf("Add thread waiting, ID: %lu\n", pthread_self());
         if ((rc = pthread_cond_wait(&me->qCond, &me->qLock))) { // 0 on success
             fprintf(stderr, "error: pthread_cond_wait, rc: %d\n", rc);
             errno = rc;
@@ -118,6 +119,9 @@ int Queue_add(struct Queue *me, void *data) {
             to wait or the unlock at the end of the working writer thread
         */ 
     }
+
+    printf("Add thread WORKING, ID: %lu\n", pthread_self());
+
 
     // check if queue is full, else if error, else proceed
     if (me->queueCap == me->queueCount) {
@@ -151,7 +155,7 @@ int Queue_add(struct Queue *me, void *data) {
     me->writers--;  // indicate a writer thread is done writing
 
     if (!me->writers) { // wake sleeping threads
-        //printf("Add thread broadcasting, ID: %lu\n", pthread_self());
+        printf("Add thread broadcasting, ID: %lu\n", pthread_self());
 
         if ((rc = pthread_cond_broadcast(&me->qCond))) { // 0 on success
             fprintf(stderr, "error: pthread_cond_broadcast, rc: %d\n", rc);
@@ -161,7 +165,7 @@ int Queue_add(struct Queue *me, void *data) {
 
     }
 
-    //printf("Add thread finishing, ID: %lu\n", pthread_self());
+    printf("Add thread finishing, ID: %lu\n", pthread_self());
 
     if ((rc = pthread_mutex_unlock(&me->qLock))) { // 0 on success
         fprintf(stderr, "error: pthread_mutex_unlock, rc: %d\n", rc);
@@ -190,9 +194,15 @@ void *Queue_remove(struct Queue *me) {
         return NULL; // TODO better error
     }
 
+    printf("Remove thread starting, ID: %lu\n", pthread_self());
+    sleep(1); // SLEEP FOR TESTING
+
     me->writers++;  // indicate a writing thread is present
 
     while (me->readers) {    // sleep if there are active reading threads
+
+        printf("\tthere are %i readers in line\n", me->readers);
+        printf("Remove thread waiting, ID: %lu\n", pthread_self());
 
         if ((rc = pthread_cond_wait(&me->qCond, &me->qLock))) { // 0 on success
             fprintf(stderr, "error: pthread_cond_wait, rc: %d\n", rc);
@@ -208,7 +218,7 @@ void *Queue_remove(struct Queue *me) {
         */ 
     }
     
-    sleep(1); // SLEEP FOR TESTING
+    printf("Remove thread WORKING, ID: %lu\n", pthread_self());
 
     // store the element before removing for return - is NULL if empty queue
     void* oldFront = me->queue[me->front];
@@ -236,6 +246,8 @@ void *Queue_remove(struct Queue *me) {
     me->writers--;  // indicate writer is complete
 
     if (!me->writers) { // wake all sleeping threads IFF no writers waiting
+
+        printf("Remove thread broadcasting, ID: %lu\n", pthread_self());
 
         if ((rc = pthread_cond_broadcast(&me->qCond))) { // 0 on success
             fprintf(stderr, "error: pthread_cond_broadcast, rc: %d\n", rc);
@@ -275,7 +287,7 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
         return NULL;
     }
     
-    //printf("Read thread starting, ID: %lu\n", pthread_self());
+    printf("Find thread starting, ID: %lu\n", pthread_self());
 
     /* 
             reader threads are blocked here if there are writers waiting
@@ -283,8 +295,8 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
             and guarantees no deadlock for waiting threads
     */ 
     while (me->writers) {    // sleep until no writers
-        //printf("\tthere are %d writers in line...\n", me->writers);
-        //printf("Read thread waiting, ID: %lu\n", pthread_self());
+        printf("\tthere are %d writers in line...\n", me->writers);
+        printf("Find thread waiting, ID: %lu\n", pthread_self());
 
         if ((rc = pthread_cond_wait(&me->qCond, &me->qLock))) { // 0 on success
             fprintf(stderr, "error: pthread_cond_wait, rc: %d\n", rc);
@@ -294,13 +306,11 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
 
     }
 
-    //printf("Read thread continuing, ID: %lu\n", pthread_self());
+    printf("Find thread WORKING, ID: %lu\n", pthread_self());
 
     me->readers++;  // indicate a reader thread present
 
     pthread_mutex_unlock(&me->qLock);   // UNLOCK
-
-    //printf("Looking for %i... ", *((int*)userArg));
 
     sleep(1); // SLEEP FOR TESTING
 
@@ -347,7 +357,7 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
 
     }
 
-    //printf("Read thread finishing, ID: %lu\n", pthread_self());
+    printf("Find thread finishing, ID: %lu\n", pthread_self());
 
     if ((rc = pthread_mutex_unlock(&me->qLock))) { // 0 on success
         fprintf(stderr, "error: pthread_mutex_unlock, rc: %d\n", rc);

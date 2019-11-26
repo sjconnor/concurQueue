@@ -20,6 +20,11 @@ struct addArgs {
    void *arg;
 };
 
+// for multithread testing of remove
+struct removeArgs {
+   struct Queue *q;
+};
+
 // Just a dummy comparator for testing - WORKS ON INT ONLY!
 int matchFn(void *userArg, void *ptr) {
 
@@ -253,20 +258,23 @@ void testCirc() {
     return;
 }
 
-// called by pthread_create for testing because find needs > 1 param
+// TODO better error handle
+// called by pthread_create for testing 
 void* findThreadPayload(void *args) {
 
     struct findArgs *a = args;
-    printf("\n%lu doing find\n", pthread_self());
-
+    printf("\t%lu doing find\n", pthread_self());
     return Queue_find(a->q, a->fn, a->arg);
+    
 
 }
 
-// called by pthread_create for testing because add needs > 1 param
+// TODO better error handle
+// called by pthread_create for testing 
 void* addThreadPayload(void *args) {
     
     struct addArgs *a = args;
+    printf("\t%lu doing add\n", pthread_self());
     
     if(Queue_add(a->q, a->arg) == -1) {
         printf("something went wrong\n");
@@ -276,6 +284,18 @@ void* addThreadPayload(void *args) {
 
 }
 
+// TODO better error handle
+// called by pthread_create for testing
+void* removeThreadPayload(void *args) {
+
+    struct removeArgs *a = args;
+    printf("\t%lu doing remove\n", pthread_self());
+
+    Queue_remove(a->q);
+
+    return NULL;
+
+}
 
 void testThreads1() {
 
@@ -302,7 +322,7 @@ void testThreads1() {
     Test for concurrent reads
     ***********************************/
 
-    printf("TEST 4... multithreading\n");
+    printf("TEST 4... concurrent reads\n");
 
     struct findArgs fArgs;
     fArgs.q = myQ;
@@ -314,9 +334,6 @@ void testThreads1() {
     double elapsed;
 
     clock_gettime(CLOCK_MONOTONIC, &start);
-
-    /* ... */
-
 
     // create 10 threads to execute find
     for (int i = 0; i < 10; i++) {
@@ -340,35 +357,114 @@ void testThreads1() {
 
     if (elapsed > 10) {
         printf("\tFAIL: it took %f seconds to do 10 finds\n", elapsed);
+        result = -1;
     } else {
         printf("\tPASS: it took %f seconds to do 10 finds\n", elapsed);
     }
-
-
-    /***********************************
-    Test for !(find && add)
-    ***********************************/
-
-    /***********************************
-    Test for !(find && remove)
-    ***********************************/
-
-    /***********************************
-    Test for !(add && remove)
-    ***********************************/
-
-    /***********************************
-    Test for !(add && add)
-    ***********************************/
-
-    /***********************************
-    Test for !(remove && remove)
-    ***********************************/
 
     if (result) {
          printf("TEST 4 RESULT: FAIL\n\n"); 
     } else {
         printf("TEST 4 RESULT: PASS\n\n");
+    }
+
+    Queue_delete(myQ);
+
+    return;
+
+}
+
+void testThreads2() {
+
+    pthread_t tID[10]; 
+
+    int result = 0;
+    int rc; // for error checks
+
+    const int numElements = 10;
+
+    // build a queue
+    struct Queue *myQ = Queue_new(numElements); 
+
+    // some test elements
+    int intArray[numElements];
+    
+    // add numElements to the queue
+    for (int i = 0; i < numElements; i++) {
+        intArray[i] = i;
+        Queue_add(myQ, (void*)&intArray[i]);
+    }
+
+    /**********************************
+    Test for read-write blocking
+    ***********************************/
+
+    printf("TEST 5... read-write blocking\n");
+
+    struct addArgs aArgs;
+    aArgs.q = myQ;
+    aArgs.arg = (void*)&intArray[numElements-1];
+
+    struct removeArgs rArgs;
+    rArgs.q = myQ;
+
+    struct findArgs fArgs;
+    fArgs.q = myQ;
+    fArgs.fn = &matchFn;
+    fArgs.arg = (void*)&intArray[numElements-1];
+
+    // time how long it takes 10 threads to do find()
+    struct timespec start, finish;
+    double elapsed;
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    // create 10 threads to execute a mix of functions
+    for (int i = 0; i < 10; i++) {
+
+        if (i % 3 == 0) {
+            //printf("\tadd %d\n", i);
+            if ((rc = pthread_create(&(tID[i]), NULL, addThreadPayload, &aArgs))) {
+                fprintf(stderr, "error: pthread_create, rc: %d\n", rc);
+                return;
+            }
+        } else if (i % 2 == 0) { // 0, 2, 4, 8
+            //printf("\tremove %d\n", i);
+            if ((rc = pthread_create(&(tID[i]), NULL, removeThreadPayload, &rArgs))) {
+                fprintf(stderr, "error: pthread_create, rc: %d\n", rc);
+                return;
+            }
+        } else { 
+            //printf("\tfind %d\n", i);
+            if ((rc = pthread_create(&(tID[i]), NULL, findThreadPayload, &fArgs))) {
+                fprintf(stderr, "error: pthread_create, rc: %d\n", rc);
+                return;
+            }   
+        }
+         
+    }
+
+    // join all threads before continuing
+    for (int i = 0; i < 10; i++) {
+        pthread_join(tID[i], NULL);
+    }
+
+    // if it took < 10 seconds, concurrency must have happened due to sleep
+    clock_gettime(CLOCK_MONOTONIC, &finish);
+    elapsed = (finish.tv_sec - start.tv_sec);
+    elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
+
+    if (elapsed < 7) {
+        printf("\tFAIL: it took %f seconds to do 7 writes and 3 reads\n", elapsed);
+        result = -1;
+    } else {
+        printf("\tPASS: it took %f seconds to do 7 writes and 3 reads\n", elapsed);
+    }
+
+    if (result) {
+         printf("TEST 5 RESULT: FAIL\n\n"); 
+    } else {
+        printf("TEST 5 RESULT: PASS\n\n");
     }
 
     Queue_delete(myQ);
@@ -385,8 +481,9 @@ int main() {
     //testRemove();
     //testCirc();
 
-    // MUST UNCOMMENT SLEEPS IN CONCURQUEUE.C TO EFFECTIVELY TIME!
-    testThreads1(); // tests that reads are concurrent 
+    // uncomment sleep(x) in concurQueue.c for thread tests (they use timing)
+    //testThreads1(); // tests that reads are concurrent 
+    testThreads2(); // tests read-write blocking
 
     return 0;
 }
