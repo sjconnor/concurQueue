@@ -480,7 +480,7 @@ int main() {
     testCirc();
 
     /* 
-        uncomment sleep(x) code in concurQueue.c for thread tests (they use timing)
+        uncomment sleep(1) code in concurQueue.c for thread tests (they use timing)
         uncomment areas marked FOR TIMED TESTS to inspect results with printf
         without this, testThreads results will be inaccurate!
     */

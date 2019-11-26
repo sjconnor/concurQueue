@@ -1,4 +1,4 @@
-#include "concurQueue.h"    // TODO needs to be a library
+#include "concurQueue.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>    
