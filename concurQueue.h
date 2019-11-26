@@ -6,7 +6,7 @@ typedef int (*Queue_matchFn)(void *userArg, void *ptr); // TODO make dummy for t
 
 struct Queue {
 
-    pthread_t tID[3]; // for testing only
+    pthread_t tID[10]; // for testing only!
 
     size_t front; // index to front of queue
     size_t back; // index to back of queue

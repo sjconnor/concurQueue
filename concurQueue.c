@@ -96,6 +96,7 @@ int Queue_add(struct Queue *me, void *data) {
     }
 
     //printf("Add thread starting, ID: %lu\n", pthread_self());
+    sleep(1); // SLEEP FOR TESTING
 
     me->writers++;  // indicate a writing thread is present
 
@@ -103,7 +104,7 @@ int Queue_add(struct Queue *me, void *data) {
     while (me->readers) { 
 
         // wait unlocks mutex on sleep, re-locks on wake from broadcast
-
+        //printf("Add thread waiting, ID: %lu\n", pthread_self());
         if ((rc = pthread_cond_wait(&me->qCond, &me->qLock))) { // 0 on success
             fprintf(stderr, "error: pthread_cond_wait, rc: %d\n", rc);
             errno = rc;
@@ -207,6 +208,8 @@ void *Queue_remove(struct Queue *me) {
         */ 
     }
     
+    sleep(1); // SLEEP FOR TESTING
+
     // store the element before removing for return - is NULL if empty queue
     void* oldFront = me->queue[me->front];
 
@@ -241,6 +244,7 @@ void *Queue_remove(struct Queue *me) {
         }  
     }
 
+
     if ((rc = pthread_mutex_unlock(&me->qLock))) { // 0 on success
         fprintf(stderr, "error: pthread_mutex_unlock, rc: %d\n", rc);
         errno = rc;
@@ -268,7 +272,7 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
     if ((rc = pthread_mutex_lock(&me->qLock))) { // 0 on success
         fprintf(stderr, "error: pthread_mutex_lock, rc: %d\n", rc);
         errno = rc;
-        return NULL; // TODO better error
+        return NULL;
     }
     
     //printf("Read thread starting, ID: %lu\n", pthread_self());
@@ -297,6 +301,8 @@ void * Queue_find(struct Queue *me, Queue_matchFn matchFn, void *userArg) {
     pthread_mutex_unlock(&me->qLock);   // UNLOCK
 
     //printf("Looking for %i... ", *((int*)userArg));
+
+    sleep(1); // SLEEP FOR TESTING
 
     size_t current = me->front;
     size_t count = me->queueCount;
