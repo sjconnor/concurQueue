@@ -1,13 +1,16 @@
 .PHONY: all test clean
 
-all: main.c concurQueue.c
-	gcc -fPIC -c concurQueue.c
-	gcc -shared -o libconnorlib.so concurQueue.o
-	gcc -o foo foo.o -L. -lmylib
+all: cq
 
-test: main.c concurQueue.c
-	gcc -g -Wall -pthread -o cq concurQueue.c main.c
+libQueue.a: concurQueue.c
+	gcc -fPIC -g -c concurQueue.c
+	ar rcs libQueue.a concurQueue.o
+
+cq: main.c libQueue.a
+	gcc -g -Wall -pthread -o cq main.c libQueue.a
+
+test: cq
 	valgrind ./cq
 
 clean: 
-	$(RM) cq
+	rm -f cq libQueue.a vgcore.* concurQueue.o

@@ -484,9 +484,9 @@ int main() {
         uncomment areas marked FOR TIMED TESTS to inspect results with printf
         without this, testThreads results will be inaccurate!
     */
-    
-    testThreads1(); // tests that reads are concurrent 
-    testThreads2(); // tests read-write blocking
+
+    //testThreads1(); // tests that reads are concurrent 
+    //testThreads2(); // tests read-write blocking
 
     return 0;
 }
