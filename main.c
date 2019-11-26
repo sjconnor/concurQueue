@@ -93,7 +93,7 @@ void testManyInts(void) {
         printf("\tPASS: all elements found\n");
     }
 
-    const int badNum = -5;
+    int badNum = -5;
 
     // try to find an element not in there
     if (Queue_find(myQ, &matchFn, (void*)&badNum) != NULL) {
@@ -475,14 +475,17 @@ void testThreads2() {
 
 int main() {
 
-    printf("You can do it!\n");
+    testManyInts();
+    testRemove();
+    testCirc();
 
-    //testManyInts();
-    //testRemove();
-    //testCirc();
-
-    // uncomment sleep(x) in concurQueue.c for thread tests (they use timing)
-    //testThreads1(); // tests that reads are concurrent 
+    /* 
+        uncomment sleep(x) code in concurQueue.c for thread tests (they use timing)
+        uncomment areas marked FOR TIMED TESTS to inspect results with printf
+        without this, testThreads results will be inaccurate!
+    */
+    
+    testThreads1(); // tests that reads are concurrent 
     testThreads2(); // tests read-write blocking
 
     return 0;
